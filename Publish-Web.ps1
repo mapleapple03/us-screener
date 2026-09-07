@@ -48,6 +48,41 @@ Write-Host ''
 Write-Host '  Menyiapkan folder docs\ untuk GitHub Pages...' -ForegroundColor Cyan
 Write-Host ''
 
+# --- 0. Samakan dulu dengan GitHub (hanya kalau mau mengunggah) ---
+# Penting kalau screener juga pernah dijalankan di komputer LAIN: isi repositori
+# di GitHub bisa lebih baru daripada yang ada di sini, dan push akan ditolak.
+#
+# Langkah ini sengaja dijalankan SEBELUM docs\ ditimpa, selagi pohon kerja masih
+# bersih. Kalau ditarik setelah ditimpa, git akan bingung menggabungkan dua versi
+# berkas HTML yang sebenarnya sama-sama hasil buatan ulang.
+if ($Push -and (Test-Path (Join-Path $root '.git'))) {
+    $prevEAP0 = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    Push-Location $root
+    try {
+        $branch0 = ''
+        try { $branch0 = (git rev-parse --abbrev-ref HEAD 2>$null).Trim() } catch { }
+        if (-not [string]::IsNullOrWhiteSpace($branch0)) {
+            # --autostash penting: Anda kemungkinan besar punya perubahan lokal yang
+            # belum di-commit (mis. tarif Pluang di lib\Config.ps1). Tanpa ini, git
+            # menolak rebase setiap kali dan penyamaan tidak pernah jalan.
+            git pull --rebase --autostash origin $branch0 2>$null | Out-Null
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host '  [OK] disamakan dulu dengan GitHub' -ForegroundColor DarkGray
+            } else {
+                # Jangan tinggalkan repositori dalam keadaan setengah rebase.
+                git rebase --abort 2>$null | Out-Null
+                Write-Host '  [!] Gagal menyamakan dengan GitHub - lanjut apa adanya.' -ForegroundColor Yellow
+                Write-Host "      Kalau nanti push ditolak, jalankan: git pull --rebase origin $branch0" -ForegroundColor DarkGray
+            }
+        }
+    }
+    finally {
+        $ErrorActionPreference = $prevEAP0
+        Pop-Location
+    }
+}
+
 # --- 1. Salin kedua dashboard ---
 Copy-Item $srcScreener (Join-Path $docs 'index.html') -Force
 Write-Host '  [OK] index.html  (screener)' -ForegroundColor Green
@@ -185,7 +220,17 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "git commit gagal." }
     git push origin $branch 2>$null | Out-Null
     if ($LASTEXITCODE -ne 0) {
-        throw "git push gagal. Pastikan Anda sudah login ke GitHub (jalankan: gh auth login)."
+        Write-Host ''
+        Write-Host '  git push GAGAL. Dua sebab yang paling sering:' -ForegroundColor Red
+        Write-Host '   1. Belum login ke GitHub di komputer ini  ->  gh auth login' -ForegroundColor Yellow
+        Write-Host '   2. Screener juga jalan di komputer lain dan sudah mengunggah duluan.' -ForegroundColor Yellow
+        Write-Host "      Perbaiki dengan:  git pull --rebase origin $branch" -ForegroundColor DarkGray
+        Write-Host '      Lalu ulangi:      .\Publish-Web.ps1 -Push' -ForegroundColor DarkGray
+        Write-Host ''
+        Write-Host '  Sebaiknya jadwal otomatis hanya aktif di SATU komputer saja.' -ForegroundColor DarkGray
+        Write-Host '  Matikan di komputer lama:  .\Install-Schedule.ps1 -Remove' -ForegroundColor DarkGray
+        Write-Host ''
+        throw "git push gagal."
     }
 
     Write-Host "  Terunggah ke GitHub (branch $branch)." -ForegroundColor Green

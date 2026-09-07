@@ -129,6 +129,54 @@ Syaratnya: komputer menyala, HP di WiFi yang sama, dan PowerShell dijalankan
 **sebagai Administrator** (kalau tidak, hanya bisa dibuka di komputer itu sendiri).
 Tidak bisa dipakai dari kantor atau lewat kuota internet.
 
+### Memindahkan ke laptop lain
+
+Semua yang diperlukan sudah ada di GitHub, jadi tidak perlu menyalin folder lewat
+flashdisk. Di **laptop baru**:
+
+```bash
+git clone https://github.com/mapleapple03/us-screener.git
+```
+
+```bash
+cd us-screener
+```
+
+```bash
+powershell -ExecutionPolicy Bypass -File .\Setup-Laptop.ps1
+```
+
+`Setup-Laptop.ps1` memeriksa git, mengisi identitas git, mengunduh daftar S&P 500
+terbaru, lalu menjalankan screener sekali supaya dashboard langsung ada isinya.
+Tambahkan `-SkipScan` kalau sedang buru-buru.
+
+Setelah itu, dua langkah yang harus Anda lakukan sendiri:
+
+1. **Pasang jadwal di laptop baru** — lewat PowerShell *Run as administrator*:
+   `.\Install-Schedule.ps1`
+2. **Matikan jadwal di laptop lama** — `.\Install-Schedule.ps1 -Remove`
+
+Kalau ingin ikut mengunggah pembaruan ke situs dari laptop baru, login GitHub
+sekali saja di sana: `gh auth login`. Tanpa itu screener tetap jalan, hasilnya
+saja yang tidak naik ke web.
+
+**Alamat situsnya tidak berubah** — tetap `mapleapple03.github.io/us-screener/`,
+jadi pintasan di HP Anda tidak perlu diapa-apakan.
+
+#### Kenapa jangan aktif di dua laptop sekaligus
+
+Keduanya mengunggah ke repositori yang sama. Kalau laptop A sudah mengunggah lebih
+dulu, unggahan laptop B ditolak git. `Publish-Web.ps1` sudah menarik pembaruan
+lebih dulu sebelum mengunggah, jadi biasanya bisa pulih sendiri — tapi hasil
+screener yang lebih tua bisa saja menimpa yang lebih baru. **Aktifkan jadwal di
+satu laptop saja.** Laptop yang satunya tetap bisa dipakai manual lewat
+`Update.bat` kapan pun.
+
+Beberapa berkas sengaja **tidak** ikut ke GitHub karena termasuk hasil, bukan
+sumber: `output\`, `data\universe.json`, dan `data\latest.json`. Semuanya dibuat
+ulang otomatis di laptop baru. Yang ikut hanyalah `data\watchlist.txt`, supaya
+daftar saham pantauan Anda tetap sama.
+
 ---
 
 ## 4. WAJIB DIBACA: biaya transaksi masih perkiraan
