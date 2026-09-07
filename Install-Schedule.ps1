@@ -1,45 +1,55 @@
 <#
 .SYNOPSIS
-    Memasang jadwal otomatis harian untuk screener dan berita saham AS.
+    Memasang jadwal otomatis harian untuk screener, berita, dan unggah ke situs.
 
 .DESCRIPTION
     Membuat dua tugas di Windows Task Scheduler:
 
-      "Screener Saham AS"  - jalan tiap hari kerja pukul 06.30 WIB
-      "Berita Saham AS"    - jalan tiap hari kerja pukul 06.45 WIB dan 19.00 WIB
+      "Screener Saham AS"  - tiap hari kerja pukul 06.30 WIB
+                             screener -> berita -> unggah ke situs (berurutan)
+
+      "Berita Saham AS"    - tiap hari kerja pukul 19.00 WIB
+                             berita -> unggah ke situs
 
     Kenapa pagi hari? Bursa AS tutup pukul 03.00-04.00 WIB (tergantung musim
     panas/dingin di sana). Jadi jam 06.30 WIB data penutupan semalam sudah
     lengkap dan siap dibaca sebelum Anda mulai beraktivitas.
 
-    Jadwal berita yang kedua (19.00 WIB) berguna untuk melihat berita menjelang
-    bursa AS buka malam harinya.
+    Kenapa berita ikut di rangkaian pagi, bukan tugas terpisah? Karena screener
+    butuh 20-35 menit. Kalau berita dijadwalkan terpisah beberapa menit setelah
+    screener mulai, ia akan membaca hasil screener KEMARIN yang belum tertimpa.
+    Dijadikan satu rangkaian, urutannya dijamin benar.
+
+    Jadwal sore (19.00) berguna untuk melihat berita menjelang bursa AS buka.
 
     Tugas hanya berjalan kalau komputer menyala. Kalau komputer sedang mati,
-    Windows akan menjalankannya begitu komputer dinyalakan kembali.
+    Windows menjalankannya begitu komputer dinyalakan kembali.
 
 .PARAMETER ScreenerTime
-    Jam screener berjalan, format HH:mm. Default 06:30.
+    Jam rangkaian pagi berjalan, format HH:mm. Default 06:30.
 
 .PARAMETER NewsTime
-    Jam berita pagi berjalan, format HH:mm. Default 06:45.
+    Jam pembaruan berita sore, format HH:mm. Default 19:00.
+    Isi string kosong ('') untuk melewati jadwal sore.
 
-.PARAMETER NewsTime2
-    Jam berita sore berjalan, format HH:mm. Default 19:00. Isi kosong untuk melewati.
+.PARAMETER NoPublish
+    Jangan ikut mengunggah ke GitHub Pages. Dashboard tetap diperbarui di
+    komputer, tapi versi yang di HP tidak ikut segar.
 
 .PARAMETER Remove
     Hapus kedua jadwal, jangan pasang.
 
 .EXAMPLE
     .\Install-Schedule.ps1
-    .\Install-Schedule.ps1 -ScreenerTime 05:30 -NewsTime 05:45
+    .\Install-Schedule.ps1 -ScreenerTime 05:30 -NewsTime 20:00
+    .\Install-Schedule.ps1 -NoPublish
     .\Install-Schedule.ps1 -Remove
 #>
 [CmdletBinding()]
 param(
     [string]$ScreenerTime = '06:30',
-    [string]$NewsTime     = '06:45',
-    [string]$NewsTime2    = '19:00',
+    [string]$NewsTime     = '19:00',
+    [switch]$NoPublish,
     [switch]$Remove
 )
 
@@ -55,7 +65,6 @@ Write-Host '   JADWAL OTOMATIS HARIAN' -ForegroundColor Cyan
 Write-Host '  ============================================================' -ForegroundColor DarkCyan
 Write-Host ''
 
-# --- Cek hak administrator ---
 $isAdmin = ([Security.Principal.WindowsPrincipal] `
     [Security.Principal.WindowsIdentity]::GetCurrent()
     ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
@@ -80,26 +89,31 @@ if ($Remove) {
     return
 }
 
-# --- Validasi format jam ---
 function Test-TimeFormat {
     param([string]$T)
     return ($T -match '^([01]?\d|2[0-3]):[0-5]\d$')
 }
-foreach ($pair in @(@{N='ScreenerTime';V=$ScreenerTime}, @{N='NewsTime';V=$NewsTime})) {
-    if (-not (Test-TimeFormat $pair.V)) {
-        Write-Host "  Format jam -$($pair.N) salah: '$($pair.V)'. Pakai format HH:mm, misal 06:30." -ForegroundColor Red
-        Write-Host ''
-        return
-    }
+if (-not (Test-TimeFormat $ScreenerTime)) {
+    Write-Host "  Format jam -ScreenerTime salah: '$ScreenerTime'. Pakai HH:mm, misal 06:30." -ForegroundColor Red
+    Write-Host ''
+    return
 }
-$useNews2 = (-not [string]::IsNullOrWhiteSpace($NewsTime2))
-if ($useNews2 -and -not (Test-TimeFormat $NewsTime2)) {
-    Write-Host "  Format jam -NewsTime2 salah: '$NewsTime2'. Pakai format HH:mm." -ForegroundColor Red
+$useNews = (-not [string]::IsNullOrWhiteSpace($NewsTime))
+if ($useNews -and -not (Test-TimeFormat $NewsTime)) {
+    Write-Host "  Format jam -NewsTime salah: '$NewsTime'. Pakai HH:mm, misal 19:00." -ForegroundColor Red
     Write-Host ''
     return
 }
 
 $days = @('Monday','Tuesday','Wednesday','Thursday','Friday')
+
+# Pembantu: satu langkah = satu skrip PowerShell.
+function New-Step {
+    param([string]$Script, [string]$Extra = '')
+    return New-ScheduledTaskAction -Execute 'powershell.exe' `
+        -Argument "-ExecutionPolicy Bypass -NoProfile -WindowStyle Hidden -File `"$root\$Script`" $Extra".Trim() `
+        -WorkingDirectory $root
+}
 
 try {
     Remove-TaskIfExists -Name $taskScreener | Out-Null
@@ -112,26 +126,38 @@ try {
         -AllowStartIfOnBatteries `
         -ExecutionTimeLimit (New-TimeSpan -Hours 2)
 
-    # --- Screener ---
-    $actS = New-ScheduledTaskAction -Execute 'powershell.exe' `
-        -Argument "-ExecutionPolicy Bypass -NoProfile -WindowStyle Hidden -File `"$root\Run-Screener.ps1`" -NoOpen" `
-        -WorkingDirectory $root
+    # --- Rangkaian pagi: screener -> berita -> unggah ---
+    # Task Scheduler menjalankan daftar action secara BERURUTAN, menunggu tiap
+    # langkah selesai. Itu yang dipakai untuk menjamin urutannya benar.
+    $actS = @(
+        (New-Step -Script 'Run-Screener.ps1' -Extra '-NoOpen'),
+        (New-Step -Script 'Run-News.ps1'     -Extra '-NoOpen')
+    )
+    if (-not $NoPublish) { $actS += (New-Step -Script 'Publish-Web.ps1' -Extra '-Push') }
+
     $trgS = New-ScheduledTaskTrigger -Weekly -DaysOfWeek $days -At $ScreenerTime
     Register-ScheduledTask -TaskName $taskScreener -Action $actS -Trigger $trgS `
-        -Settings $settings -Description 'Memperbarui screener saham AS setiap pagi.' | Out-Null
-    Write-Host "  [OK] '$taskScreener' -> tiap Senin-Jumat pukul $ScreenerTime WIB" -ForegroundColor Green
+        -Settings $settings -Description 'Screener + berita + unggah, tiap pagi.' | Out-Null
 
-    # --- Berita ---
-    $actN = New-ScheduledTaskAction -Execute 'powershell.exe' `
-        -Argument "-ExecutionPolicy Bypass -NoProfile -WindowStyle Hidden -File `"$root\Run-News.ps1`" -NoOpen" `
-        -WorkingDirectory $root
-    $trgN = @(New-ScheduledTaskTrigger -Weekly -DaysOfWeek $days -At $NewsTime)
-    if ($useNews2) { $trgN += New-ScheduledTaskTrigger -Weekly -DaysOfWeek $days -At $NewsTime2 }
-    Register-ScheduledTask -TaskName $taskNews -Action $actN -Trigger $trgN `
-        -Settings $settings -Description 'Memperbarui berita saham AS.' | Out-Null
-    $jam = $NewsTime
-    if ($useNews2) { $jam = "$NewsTime dan $NewsTime2" }
-    Write-Host "  [OK] '$taskNews' -> tiap Senin-Jumat pukul $jam WIB" -ForegroundColor Green
+    $langkah = 'screener -> berita'
+    if (-not $NoPublish) { $langkah += ' -> unggah ke situs' }
+    Write-Host "  [OK] '$taskScreener'" -ForegroundColor Green
+    Write-Host "       Senin-Jumat $ScreenerTime WIB  ($langkah)" -ForegroundColor DarkGray
+
+    # --- Pembaruan berita sore ---
+    if ($useNews) {
+        $actN = @( (New-Step -Script 'Run-News.ps1' -Extra '-NoOpen') )
+        if (-not $NoPublish) { $actN += (New-Step -Script 'Publish-Web.ps1' -Extra '-Push') }
+
+        $trgN = New-ScheduledTaskTrigger -Weekly -DaysOfWeek $days -At $NewsTime
+        Register-ScheduledTask -TaskName $taskNews -Action $actN -Trigger $trgN `
+            -Settings $settings -Description 'Memperbarui berita saham AS.' | Out-Null
+
+        $langkah2 = 'berita'
+        if (-not $NoPublish) { $langkah2 += ' -> unggah ke situs' }
+        Write-Host "  [OK] '$taskNews'" -ForegroundColor Green
+        Write-Host "       Senin-Jumat $NewsTime WIB  ($langkah2)" -ForegroundColor DarkGray
+    }
 }
 catch {
     Write-Host ''
@@ -147,7 +173,10 @@ catch {
 
 Write-Host ''
 Write-Host '  Bursa AS tutup pukul 03.00-04.00 WIB, jadi jam segini data semalam' -ForegroundColor DarkGray
-Write-Host '  sudah lengkap. Dashboard tinggal dibuka dari folder output\.' -ForegroundColor DarkGray
+Write-Host '  sudah lengkap.' -ForegroundColor DarkGray
+if (-not $NoPublish) {
+    Write-Host '  Dashboard di HP ikut diperbarui otomatis setelah tiap jadwal.' -ForegroundColor DarkGray
+}
 Write-Host ''
 Write-Host '  Untuk mematikan jadwal:  .\Install-Schedule.ps1 -Remove' -ForegroundColor DarkGray
 Write-Host ''

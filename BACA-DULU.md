@@ -69,7 +69,69 @@ Matikan jadwal: `.\Install-Schedule.ps1 -Remove`
 
 ---
 
-## 3. WAJIB DIBACA: biaya transaksi masih perkiraan
+## 3. Membuka dari HP Android
+
+Kedua dashboard sudah terbit di internet:
+
+| | Alamat |
+|---|---|
+| **Screener** | https://mapleapple03.github.io/us-screener/ |
+| **Berita & Agenda** | https://mapleapple03.github.io/us-screener/berita.html |
+
+Di dalam dashboard ada tombol **Screener** dan **Berita & Agenda** di bagian atas,
+jadi cukup simpan satu alamat saja — berpindah tinggal satu ketukan.
+
+### Pasang di layar utama HP (jadi seperti aplikasi)
+
+1. Buka alamat di atas lewat **Chrome** di HP
+2. Ketuk menu **tiga titik** di pojok kanan atas
+3. Pilih **"Add to Home screen"** / **"Tambahkan ke layar utama"**
+
+Ikonnya (garis biru naik dengan titik hijau) akan muncul di layar utama dan terbuka
+layar penuh tanpa address bar. Ikonnya sengaja dibedakan dari screener IDX Anda yang
+memakai ikon batang hijau.
+
+### Memperbarui isi situs
+
+Situs **tidak** ikut ter-update sendiri saat screener jalan di komputer. Setelah
+`Update.bat` selesai, unggah hasilnya:
+
+```bash
+powershell -ExecutionPolicy Bypass -File .\Publish-Web.ps1 -Push
+```
+
+Perubahan tampil di HP sekitar 1–2 menit kemudian. Kalau halaman di HP masih versi
+lama, tarik ke bawah untuk refresh.
+
+Mau otomatis tiap hari? Tambahkan baris itu ke akhir `Update.bat`, atau jalankan
+`Publish-Web.ps1 -Push` lewat Task Scheduler beberapa menit setelah screener selesai.
+
+### Catatan privasi
+
+Repositori `us-screener` bersifat **publik** — itu syarat GitHub Pages gratis.
+Siapa pun yang tahu alamatnya bisa membuka dashboard Anda, termasuk melihat daftar
+saham pantauan. Isinya hanya olahan data pasar yang memang sudah publik: tidak ada
+data akun, saldo, atau posisi Anda di dalamnya.
+
+Yang **tidak** ikut terunggah (sudah dikecualikan lewat `.gitignore`):
+`output\`, `data\universe.json`, dan `data\latest.json`.
+
+### Kalau tidak mau ada di internet
+
+Ada pilihan lain yang sepenuhnya privat — server kecil di WiFi rumah Anda:
+
+```bash
+powershell -ExecutionPolicy Bypass -File .\Serve-Local.ps1
+```
+
+Skrip akan menampilkan alamat seperti `http://192.168.1.5:8080/` untuk dibuka di HP.
+Syaratnya: komputer menyala, HP di WiFi yang sama, dan PowerShell dijalankan
+**sebagai Administrator** (kalau tidak, hanya bisa dibuka di komputer itu sendiri).
+Tidak bisa dipakai dari kantor atau lewat kuota internet.
+
+---
+
+## 4. WAJIB DIBACA: biaya transaksi masih perkiraan
 
 Angka biaya di `lib\Config.ps1` **bukan tarif resmi Pluang** — saya tidak bisa
 memverifikasinya dari komputer Anda. Yang dipakai sekarang:
