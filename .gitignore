@@ -1,0 +1,8 @@
+# Hasil kerja yang dibuat ulang tiap kali screener jalan.
+output/
+data/universe.json
+data/latest.json
+
+# Berkas sementara Windows
+Thumbs.db
+desktop.ini

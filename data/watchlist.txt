@@ -1,0 +1,30 @@
+# Daftar saham yang ingin Anda ikuti beritanya.
+#
+# Cara pakai:
+#   - Satu kode saham per baris.
+#   - Baris yang diawali # diabaikan (dipakai untuk catatan seperti ini).
+#   - Kalau SELURUH baris di bawah Anda beri tanda #, Run-News.ps1 otomatis
+#     memakai saham dengan sinyal beli terbaik dari hasil screener terakhir.
+#
+# Makin banyak saham di sini, makin lama pengambilan beritanya
+# (sekitar 1 detik per saham). 10-20 saham sudah cukup.
+
+# --- Raksasa teknologi (paling sering jadi berita) ---
+AAPL
+MSFT
+NVDA
+GOOGL
+AMZN
+META
+TSLA
+
+# --- ETF indeks: cara paling sederhana ikut pasar AS ---
+SPY
+QQQ
+
+# --- Relevan untuk investor Indonesia ---
+# SE     Sea Limited - induk Shopee
+# GRAB   Grab Holdings
+# EIDO   ETF saham Indonesia yang diperdagangkan di bursa AS
+SE
+GRAB
